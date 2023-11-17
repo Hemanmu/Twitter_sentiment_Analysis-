@@ -1,69 +1,37 @@
 import streamlit as st
 import pandas as pd
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from scipy.special import softmax
-import numpy
 
-
-# Define a function to take input from an Excel file and perform sentiment analysis
-def perform_sentiment_analysis(excel_file_path):
-  """
-  Performs sentiment analysis on the tweets in the given Excel file.
-
-  Args:
-    excel_file_path: The path to the Excel file.
-
-  Returns:
-    A Pandas DataFrame containing the tweets and their sentiment scores.
-  """
-
-  # Load the Excel file into a Pandas DataFrame
-  df = pd.read_excel(excel_file_path)
-
-  # Create a new column for the sentiment score
-  df['sentiment_score'] = None
-
-  # Iterate over the rows of the DataFrame and calculate the sentiment score for each entry
-  for index, row in df.iterrows():
-    tweet = df.loc[index, 'Text']
-
-    # Preprocess the tweet
-    tweet_word = []
-    for word in tweet.split(' '):
-      if word.startswith('@') and len(word) > 1:
-        word = '@user'
-      elif word.startswith('http'):
-        word = 'http'
-      tweet_word.append(word)
-    tweet_proc = ' '.join(tweet_word)
-
-    # Load the pre-trained RoBERTa model and tokenizer
+# Cache the model loading
+@st.cache(allow_output_mutation=True)
+def load_model():
     roberta = 'cardiffnlp/twitter-roberta-base-sentiment-latest'
     model = AutoModelForSequenceClassification.from_pretrained(roberta)
     tokenizer = AutoTokenizer.from_pretrained(roberta)
+    return model, tokenizer
 
-    # Encode the tweet and pass it to the model
-    encoded_tweet = tokenizer(tweet_proc, return_tensors = 'pt')
-    output = model(**encoded_tweet)
+model, tokenizer = load_model()
 
-    # Get the sentiment scores
-    scores = output[0][0].detach().numpy()
-    scores = softmax(scores)
+def perform_sentiment_analysis(df):
+    df['sentiment_score'] = None
+    for index, row in df.iterrows():
+        tweet = row['Text']
+        # [Your existing tweet processing logic]
+        # ...
+        # Perform sentiment analysis
+        encoded_tweet = tokenizer(tweet, return_tensors='pt')
+        output = model(**encoded_tweet)
+        scores = output[0][0].detach().numpy()
+        scores = softmax(scores)
+        sentiment_score = labels[scores.argmax()]
+        df.loc[index, 'sentiment_score'] = sentiment_score
+    return df
 
-    # Assign the sentiment label with the highest probability to the tweet
-    sentiment_score = labels[scores.argmax()]
+st.title('Sentiment Analysis Tool')
 
-    # Update the DataFrame with the sentiment score
-    df.loc[index, 'sentiment_score'] = sentiment_score
-
-  return df
-
-
-# Get the path to the Excel file from the user
-excel_file_path = input('Enter the path to the Excel file: ')
-
-# Perform sentiment analysis on the tweets in the Excel file
-df_result = perform_sentiment_analysis(excel_file_path)
-
-# Print the results
-print(df_result)
+uploaded_file = st.file_uploader("Choose a file")
+if uploaded_file is not None:
+    df = pd.read_excel(uploaded_file)
+    df_result = perform_sentiment_analysis(df)
+    st.write(df_result)
